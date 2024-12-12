@@ -1,5 +1,8 @@
 import numpy as np
 from PIL import Image
+from multiprocessing import Pool, cpu_count
+from functools import partial
+import time
 
 class camera:
     def __init__(self, width, height, direction = np.array([0, 0, 1])):
@@ -12,14 +15,28 @@ class camera:
         up = up / (np.linalg.norm(up)*max(width, height))
         self.grid = [[self.direction+(x-width/2)*right+(y-height/2)*up for x in range(width)] for y in range(height)]
 
-    def render(self, objects):
+    def processPixel(self, coord, objects):
+        x, y = coord
+        point = self.grid[y][x]
+        result = np.array([0, 0, 0], dtype=float)
+        amount = 300
+        for _ in range(amount):
+            r = ray(np.array([0, 0, 0]), point/np.linalg.norm(point))
+            result += r.trace(objects)
+        return self.width-x-1, self.height-y-1, tuple((result/amount*255).astype(int)) 
+
+    def render(self, objects, amountProcesses = cpu_count()):
+
+        coords = [[x, y] for x in range(self.width) for y in range(self.height)]
+        pixelFunc = partial(self.processPixel, objects=objects)
+            
+        print(f"Processes: {amountProcesses}")
+        with Pool(processes=amountProcesses) as pool:
+            res = pool.map(pixelFunc, coords)
+
         img = Image.new('RGB', (self.width, self.height))
         pixels = img.load()
-        for y in range(self.height):
-            for x in range(self.width):
-                point = self.grid[y][x]
-                r = ray(np.array([0, 0, 0]), point/np.linalg.norm(point))
-                pixels[self.width-x-1,self.height-y-1] = tuple((r.trace(objects)*255).astype(int)) 
+        for x, y, color in res: pixels[x, y] = color
 
         img.save('render.png')
         
@@ -27,15 +44,15 @@ class camera:
 class object:
     def __init__(self, type, params, color = (1, 1, 1), emittedColor = (1, 1, 1), luminance = 0):
         self.type = type
-        self.color = color
-        self.emittedColor = emittedColor
+        self.color = np.array(color, dtype=float)
+        self.emittedColor = np.array(emittedColor, dtype=float)
         self.luminance = luminance
         if type == "sphere":
-            self.center = params[0]
-            self.radius = params[1]
+            self.center = np.array(params[0], dtype=float)
+            self.radius = np.array(params[1], dtype=float)
         elif type == "plane": # ensidig
-            self.point = params[0]
-            self.normal = params[1]
+            self.point = np.array(params[0], dtype=float)
+            self.normal = np.array(params[1], dtype=float)
             self.distance = np.dot(self.point, self.normal)
         # elif type == "triangle":
         #     self.vertices = params
@@ -48,16 +65,17 @@ class ray:
         self.origin = np.array(origin, dtype=float)
         self.direction = np.array(direction, dtype=float)
 
+
+
     def trace(self, objects, depth = 10):
         incomingColor = np.array([0, 0, 0], dtype=float)
         rayColor = np.array([1, 1, 1], dtype=float)
-        # print("start")
-        for i in range(depth):
+        for _ in range(depth):
             result, distance = self.intersect(objects)
             if result == None: break
             self.origin+=self.direction*distance
             self.direction = self.randomDirection(self.findNormal(result))
-            # print(rayColor, incomingColor, result.luminance)
+
             incomingColor+=result.emittedColor*result.luminance*rayColor
             rayColor *= result.color
 
@@ -115,13 +133,15 @@ def main():
     objects = [
         object("sphere", [np.array([0, 0, 4]), 1], (1, 0, 0), 0), 
         object("sphere", [np.array([1.1, 0, 4.5]), .5], (.3, 0, 1), 0), 
-        object("sphere", [np.array([-3, 25, 8]), 20], luminance=1), 
+        object("sphere", [np.array([-9, 25, 14]), 20], luminance=1), 
         object("plane", [np.array([0, -1, 0]), np.array([0, 1, 0])], (0, 1, 0), 0)
     ]
-    cam.render(objects)
-
+    cam.render(objects, amountProcesses=8)
 
 
 if __name__ == "__main__":
+    starttime = time.time()
     main()
+    print(f"Render time: {time.time()-starttime:.2f}s")
+    
 
