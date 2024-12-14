@@ -1,3 +1,3 @@
 # tbeskow-raytracer
 
-![Render](images/v4.png)
+![Render](render.png)

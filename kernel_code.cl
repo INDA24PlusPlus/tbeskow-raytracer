@@ -77,7 +77,7 @@ float3 findNormal(float3 origin, global Object *objects, int index){
 }
 
 
-kernel void trace(global Ray *rays, global Object *objects, int amObjects, int depth, int amount, global float4 *result){
+kernel void trace(global Ray *rays, global Object *objects, int amObjects, int depth, int amount, uint state, global float4 *result){
     int id = get_global_id(0);
     Ray ray = rays[id];
 
@@ -92,9 +92,12 @@ kernel void trace(global Ray *rays, global Object *objects, int amObjects, int d
             float2 intersection = intersect(ray, objects, amObjects);
             int index = intersection.x;
             float distance = intersection.y;
-            if(index == -1) break;
+            if(index == -1){
+                incomingColor += rayColor*0.1f;
+                break;
+            }
             ray.origin += ray.direction*distance;
-            ray.direction = randomDirection(findNormal(ray.origin, objects, index), id*depth*2+i+iteration*291383);
+            ray.direction = randomDirection(findNormal(ray.origin, objects, index), id*depth*2+i+iteration*291383+state);
 
             incomingColor+=objects[index].color*objects[index].luminance*rayColor;
             rayColor *= objects[index].color;
@@ -102,6 +105,6 @@ kernel void trace(global Ray *rays, global Object *objects, int amObjects, int d
         res += incomingColor;
     }
 
-    result[id] = (float4)(res/amount, 0);
+    result[id] += (float4)(res, 0);
 }
 

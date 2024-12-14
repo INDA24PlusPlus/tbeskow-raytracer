@@ -24,6 +24,7 @@ class camera:
 
 
     def render(self, preObjects):
+        starttime = time.time()
 
         rays = np.array([(np.array([0., 0., 0., 0.]), np.concatenate([point/np.linalg.norm(point), [0.]]))
                          for row in self.grid for point in row],
@@ -32,6 +33,9 @@ class camera:
                             ("direction", "f4", 4),
                          ])
         
+        print(f"Rays time: {time.time()-starttime:.2f}s")
+        starttime = time.time()
+
         objects = np.array([(
             np.int32(0 if obj.type == "sphere" else 1),
             np.float32(obj.luminance),
@@ -53,20 +57,32 @@ class camera:
             ("normal", "f4", 4),
         ], align=True))
 
+        print(f"Objects time: {time.time()-starttime:.2f}s")
+        starttime = time.time()
+
 
         results = np.zeros(len(rays), dtype=np.dtype("f4, f4, f4, f4"))
+        results_sum = np.zeros(len(rays), dtype=np.dtype("f4, f4, f4, f4"))
         
         mf = cl.mem_flags
         rays_buf = cl.Buffer(self.context, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=rays)
         objects_buf = cl.Buffer(self.context, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=objects)
         results_buf = cl.Buffer(self.context, mf.WRITE_ONLY, results.nbytes)
 
+        print(f"Buffers time: {time.time()-starttime:.2f}s")
+        starttime = time.time()
 
         depth = 10
-        amount = 10000
-        self.program.trace(self.queue, (len(rays),), None, rays_buf, objects_buf, np.int32(len(objects)), np.int32(depth), np.int32(amount), results_buf)
+        amount = 300
+        batches = 100
+        for i in range(batches):
+            self.program.trace(self.queue, (len(rays),), None, rays_buf, objects_buf, np.int32(len(objects)), np.int32(depth), np.int32(amount), np.int32(i*98321), results_buf)
+            cl.enqueue_copy(self.queue, results, results_buf)
+            for j in range(3):
+                results_sum[f"f{j}"] += results[f"f{j}"]
 
-        cl.enqueue_copy(self.queue, results, results_buf)
+        print(f"Kernel time: {time.time()-starttime:.2f}s")
+        starttime = time.time()
 
         img = Image.new('RGB', (self.width, self.height))
         pixels = img.load()
@@ -74,10 +90,11 @@ class camera:
         for i, (r, g, b, _) in enumerate(results):
             x, y = i % self.width, i // self.width
 
-            pixels[self.width-x-1, self.height-y-1] = tuple((int(r*255), int(g*255), int(b*255)))
+            pixels[self.width-x-1, self.height-y-1] = tuple((int(r/(amount*batches)*255), int(g/(amount*batches)*255), int(b/(amount*batches)*255)))
 
         img.save('render.png')
 
+        print(f"Save time: {time.time()-starttime:.2f}s")
 
 class object:
     def __init__(self, type, params, color = (1, 1, 1), emittedColor = (1, 1, 1), luminance = 0):
@@ -100,8 +117,10 @@ class object:
 
 def main():
     width, height = 192*2, 108*2
+    starttime = time.time()
     # width, height = 50, 40
     cam = camera(width, height)
+    print(f"Camera time: {time.time()-starttime:.2f}s")
     objects = [
         object("sphere", [np.array([0, 0, 4]), 1.], (1, 0, 0)), 
         object("sphere", [np.array([1.1, 0, 4.5]), .5], (.3, 0, 1)), 
@@ -109,11 +128,10 @@ def main():
         object("plane", [np.array([0, -1, 0]), np.array([0, 1, 0])], (0, 1, 0))
     ]
     cam.render(objects)
+    print(f"Total time: {time.time()-starttime:.2f}s")
 
 
 if __name__ == "__main__":
-    starttime = time.time()
     main()
-    print(f"Render time: {time.time()-starttime:.2f}s")
     
 
