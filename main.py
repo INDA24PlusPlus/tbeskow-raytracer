@@ -19,7 +19,7 @@ class camera:
         x, y = coord
         point = self.grid[y][x]
         result = np.array([0, 0, 0], dtype=float)
-        amount = 300
+        amount = 30
         for _ in range(amount):
             r = ray(np.array([0, 0, 0]), point/np.linalg.norm(point))
             result += r.trace(objects)
@@ -47,13 +47,13 @@ class object:
         self.color = np.array(color, dtype=float)
         self.emittedColor = np.array(emittedColor, dtype=float)
         self.luminance = luminance
-        if type == "sphere":
+        if type == "sphere": # ensidig
             self.center = np.array(params[0], dtype=float)
             self.radius = np.array(params[1], dtype=float)
         elif type == "plane": # ensidig
-            self.point = np.array(params[0], dtype=float)
+            # self.point = np.array(params[0], dtype=float)
             self.normal = np.array(params[1], dtype=float)
-            self.distance = np.dot(self.point, self.normal)
+            self.distance = np.dot(params[0], self.normal)
         # elif type == "triangle":
         #     self.vertices = params
         else:
@@ -104,7 +104,7 @@ class ray:
             if object.type == "sphere":
                 dist = self.intersect_sphere(object.center, object.radius)
             elif object.type == "plane":
-                dist = self.intersect_plane(object.point, object.normal, object.distance)
+                dist = self.intersect_plane(object.normal, object.distance)
             if dist <= 1e-8: continue
             if dist < min_dist:
                 min_dist = dist
@@ -116,14 +116,14 @@ class ray:
         a = np.sum(self.direction*self.direction)
         b = 2*np.sum(v*self.direction)
         c = np.sum(v*v)-r*r
-        if b**2-4*a*c<0: return -1
-        t1 = (-b-np.sqrt(b**2-4*a*c))/(2*a)
-        t2 = (-b+np.sqrt(b**2-4*a*c))/(2*a)
-        return t2 if t1 < 0 else t1
+        toRoot = b**2-4*a*c
+        if toRoot < 0: return -1
+        return (-b-np.sqrt(toRoot))/(2*a)
     
-    def intersect_plane(self, Op, N, distance):
-        if np.dot(self.direction, N) == 0: return -1
-        return (distance-np.dot(self.origin, N))/np.dot(self.direction, N)
+    def intersect_plane(self, N, distance):
+        scalar = np.dot(self.direction, N)
+        if scalar == 0: return -1
+        return (distance-np.dot(self.origin, N))/scalar
     
 
 def main():
